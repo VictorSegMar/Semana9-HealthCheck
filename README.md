@@ -6,7 +6,7 @@
 ---
 
 ## 📋 Descripción General
-Solución integral de automatización en PowerShell diseñada para auditar la salud operativa, postura de seguridad y estado de parcheo de equipos Windows, consolidando los hallazgos en un **Dashboard Ejecutivo en Excel** con ejecución diaria programada y mecanismos de respaldo/rollback.
+Solución integral de automatización en PowerShell diseñada para auditar la salud operativa, postura de seguridad y estado de parcheo de equipos Windows, consolidando los hallazgos en un **Dashboard Ejecutivo en Excel** con ejecución diaria programada.
 
 ---
 
@@ -18,7 +18,8 @@ Solución integral de automatización en PowerShell diseñada para auditar la sa
 | **`HealthCheckDashboard.ps1`** | Procesa los datos recolectados, evalúa 11 reglas dinámicas de riesgo y construye un libro de Excel de 6 pestañas con tarjetas KPI, gráficos ejecutivos y formato listo para PDF. |
 | **`Run-HealthCheckSuite.ps1`** | Script orquestador que ejecuta secuencialmente el diagnóstico (`HealthCheck.ps1`) y la generación del reporte gerencial (`HealthCheckDashboard.ps1`). |
 | **`Configurar-TareaProgramada.ps1`** | Instalador parametrizable que registra o actualiza la ejecución automática diaria en el Programador de Tareas de Windows. |
-| **`Rollback.ps1`** | Script de contingencia que crea un respaldo comprimido (`.zip`) de los reportes actuales, limpia el directorio de salida y registra la auditoría de restauración. |
+| **`Aplicar_Nuevo_Horario.bat`** | Lanzador de un solo clic con elevación automática de privilegios para aplicar cambios de horario sin abrir manualmente la consola. |
+| **`Rollback.ps1`** | Script de contingencia para limpiar archivos generados y restaurar el directorio al estado inicial. |
 
 ---
 
@@ -40,7 +41,7 @@ Solución integral de automatización en PowerShell diseñada para auditar la sa
 
 ## ⚙️ Requisitos Previos
 1. **Windows 10 / 11** o **Windows Server** con PowerShell 5.1 o superior.
-2. Ejecutar PowerShell con permisos de **Administrador** (requerido para consultar BitLocker, Secure Boot, eventos del sistema y registrar tareas programadas).
+2. Ejecutar con permisos de **Administrador** (requerido para BitLocker, Secure Boot, eventos del sistema y registro de tareas programadas).
 3. Módulo **`ImportExcel`** instalado:
    ```powershell
    Install-Module -Name ImportExcel -Scope CurrentUser -Force
@@ -61,22 +62,25 @@ Solución integral de automatización en PowerShell diseñada para auditar la sa
    ```
 3. Los archivos resultantes se almacenarán en `C:\Semana9-Automatizacion\Reportes\`.
 
-### Ejecución Automática Programada
-1. Editar la variable `$HoraEjecucion` dentro de **`Configurar-TareaProgramada.ps1`** (por defecto `"15:20"`).
-2. Ejecutar como Administrador para registrar o actualizar la tarea en Windows:
-   ```powershell
-   .\Configurar-TareaProgramada.ps1
-   ```
+### Ejecución Automática Programada (Sin consola)
+1. Abrir **`Configurar-TareaProgramada.ps1`** y editar la variable `$HoraEjecucion` (formato 24h, ej. `"15:50"`).
+2. Hacer doble clic sobre **`Aplicar_Nuevo_Horario.bat`** y aceptar el control de cuentas de usuario (**Sí**) para aplicar el nuevo horario automáticamente.
 
 ---
 
-## 🔄 Procedimiento de Rollback (Reversión)
+## 🔄 Procedimiento de Rollback y Recuperación
 
-* **Reversión de entorno (Respaldo ZIP y limpieza de reportes):**
+### 1. Limpieza de Archivos Generados (`.\Rollback.ps1`)
+```powershell
+.\Rollback.ps1
+```
+
+### 2. Rollback de Código Fuente (Git)
+* **Descartar cambios locales no confirmados:**
   ```powershell
-  .\Rollback.ps1
+  git checkout -- HealthCheck.ps1
   ```
-* **Reversión de código (Restaurar un script corrupto desde Git):**
+* **Restaurar un script desde una versión estable anterior:**
   ```powershell
   git log --oneline
   git checkout <hash-version-estable> -- HealthCheck.ps1
