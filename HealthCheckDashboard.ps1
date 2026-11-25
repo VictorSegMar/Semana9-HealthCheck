@@ -123,10 +123,34 @@ if ([int]$Actual.ServiciosAutomaticosDetenidos -gt 10) {
     $Recomendaciones += [PSCustomObject]@{ ID = "REC-08"; Prioridad = "BAJA"; Accion = "Validar si los servicios detenidos corresponden a tareas diferidas (Delayed Start) o fallos"; Responsable = "Operaciones TI" }
 }
 
-if ($Riesgos.Count -eq 0) {
-    $Riesgos += [PSCustomObject]@{ ID = "RSK-00"; Componente = "General"; Hallazgo = "Sin riesgos críticos detectados"; Severidad = "OK"; Impacto = "Operación dentro de parámetros normales" }
-    $Recomendaciones += [PSCustomObject]@{ ID = "REC-00"; Prioridad = "INFORMATIVA"; Accion = "Mantener monitoreo preventivo programado"; Responsable = "Operaciones TI" }
+$critSecVal = 0
+[int]::TryParse([string]$Actual.ParchesPendientes_CritSec, [ref]$critSecVal) | Out-Null
+$opcVal = 0
+[int]::TryParse([string]$Actual.ParchesPendientes_Opcionales, [ref]$opcVal) | Out-Null
+
+if ($critSecVal -gt 0) {
+    $Riesgos += [PSCustomObject]@{ ID = "RSK-09"; Componente = "Parches / SO"; Hallazgo = "$critSecVal parches críticos/de seguridad pendientes de instalación"; Severidad = "ALTA"; Impacto = "Exposición a vulnerabilidades conocidas mitigadas por el fabricante" }
+    $Recomendaciones += [PSCustomObject]@{ ID = "REC-09"; Prioridad = "ALTA"; Accion = "Programar ventana de mantenimiento para instalar parches de seguridad pendientes"; Responsable = "Infraestructura" }
 }
+
+if ($opcVal -gt 0) {
+    $Riesgos += [PSCustomObject]@{ ID = "RSK-10"; Componente = "Parches / SO"; Hallazgo = "$opcVal actualizaciones opcionales disponibles"; Severidad = "BAJA"; Impacto = "Mejoras de estabilidad, controladores o funcionalidad pendientes" }
+    $Recomendaciones += [PSCustomObject]@{ ID = "REC-10"; Prioridad = "BAJA"; Accion = "Evaluar compatibilidad e instalar actualizaciones opcionales en ciclo programado"; Responsable = "Soporte Técnico" }
+}
+
+if ($Actual.FechaHotFix -and $Actual.FechaHotFix -ne "No Disponible") {
+    try {
+        $DiasSinParche = ((Get-Date) - [datetime]$Actual.FechaHotFix).Days
+        if ($DiasSinParche -gt 45) {
+            $Riesgos += [PSCustomObject]@{ ID = "RSK-11"; Componente = "Parches / SO"; Hallazgo = "Último parche ($($Actual.UltimoHotFix)) aplicado hace $DiasSinParche días ($($Actual.FechaHotFix))"; Severidad = "MEDIA"; Impacto = "Desfase respecto al ciclo mensual de actualización (Patch Tuesday)" }
+            $Recomendaciones += [PSCustomObject]@{ ID = "REC-11"; Prioridad = "MEDIA"; Accion = "Auditar agente Windows Update (wuauserv) y sincronización con WSUS/Intune"; Responsable = "Infraestructura" }
+        }
+    } catch {}
+}
+
+if ($Riesgos.Count -eq 0) {
+}
+
 
 ########################################################################
 # 5. EXPORTACIÓN BASE CON IMPORTEXCEL
@@ -343,8 +367,8 @@ function Format-TablaEjecutiva {
 
 
 # Banners de Titulo (02 a 06)
-Set-BannerTitulo -Worksheet $Excel.Workbook.Worksheets["02_UltimaEjecucion"] -Rango "A1:AV1" -Texto "REPORTE TECNICO DETALLADO - ULTIMA EJECUCION ($($Actual.Equipo))"
-Set-BannerTitulo -Worksheet $Excel.Workbook.Worksheets["03_Historico"]       -Rango "A1:AV1" -Texto "HISTORICO DE EJECUCIONES HEALTH CHECK ($($Actual.Equipo))"
+Set-BannerTitulo -Worksheet $Excel.Workbook.Worksheets["02_UltimaEjecucion"] -Rango "A1:AX1" -Texto "REPORTE TECNICO DETALLADO - ULTIMA EJECUCION ($($Actual.Equipo))"
+Set-BannerTitulo -Worksheet $Excel.Workbook.Worksheets["03_Historico"]       -Rango "A1:AX1" -Texto "HISTORICO DE EJECUCIONES HEALTH CHECK ($($Actual.Equipo))"
 Set-BannerTitulo -Worksheet $Excel.Workbook.Worksheets["04_Seguridad"]       -Rango "A1:D1"  -Texto "MATRIZ DE CUMPLIMIENTO DE SEGURIDAD Y HARDENING"
 Set-BannerTitulo -Worksheet $Excel.Workbook.Worksheets["05_RiesgosYAcciones"] -Rango "A1:E1"  -Texto "GESTION DE RIESGOS DETECTADOS Y PLAN DE ACCION EJECUTIVO"
 Set-BannerTitulo -Worksheet $Excel.Workbook.Worksheets["06_LogEjecucion"]    -Rango "A1:C1"  -Texto "BITACORA DE AUDITORIA Y EJECUCION (LOG)"
@@ -594,15 +618,41 @@ $cS.Style.VerticalAlignment   = [OfficeOpenXml.Style.ExcelVerticalAlignment]::Ce
 Set-BordeFino -Worksheet $wsExec -Rango "$($k.C1)8:$($k.C2)10"
 }
 
+# Barra Ejecutiva de Estado de Windows Update / Parcheo (Fila 12)
+$wsExec.Row(12).Height = 26
+$wsExec.Row(13).Height = 10
+
+$patchBG = if ($critSecVal -gt 0) { $ColorRedLight } elseif ($opcVal -gt 0) { $ColorAmberLight } else { $ColorGreenLight }
+$patchFG = if ($critSecVal -gt 0) { $ColorRedBG } elseif ($opcVal -gt 0) { [System.Drawing.Color]::FromArgb(180, 83, 9) } else { $ColorGreenBG }
+
+$wsExec.Cells["B12:E12"].Merge = $true
+$cPatchLbl = $wsExec.Cells["B12"]
+$cPatchLbl.Value = "WINDOWS UPDATE & PARCHEO"
+$cPatchLbl.Style.Font.Size = 9; $cPatchLbl.Style.Font.Bold = $true; $cPatchLbl.Style.Font.Color.SetColor($ColorWhite)
+$cPatchLbl.Style.Fill.PatternType = [OfficeOpenXml.Style.ExcelFillStyle]::Solid
+$cPatchLbl.Style.Fill.BackgroundColor.SetColor($ColorNavyMed)
+$cPatchLbl.Style.HorizontalAlignment = [OfficeOpenXml.Style.ExcelHorizontalAlignment]::Center
+$cPatchLbl.Style.VerticalAlignment   = [OfficeOpenXml.Style.ExcelVerticalAlignment]::Center
+
+$wsExec.Cells["F12:Q12"].Merge = $true
+$cPatchVal = $wsExec.Cells["F12"]
+$cPatchVal.Value = "Último Parche Aplicado: $($Actual.UltimoHotFix) (Fecha: $($Actual.FechaHotFix))   |   Pendientes Críticos/Seguridad: $($Actual.ParchesPendientes_CritSec)   |   Pendientes Opcionales: $($Actual.ParchesPendientes_Opcionales)"
+$cPatchVal.Style.Font.Size = 9.5; $cPatchVal.Style.Font.Bold = $true; $cPatchVal.Style.Font.Color.SetColor($patchFG)
+$cPatchVal.Style.Fill.PatternType = [OfficeOpenXml.Style.ExcelFillStyle]::Solid
+$cPatchVal.Style.Fill.BackgroundColor.SetColor($patchBG)
+$cPatchVal.Style.HorizontalAlignment = [OfficeOpenXml.Style.ExcelHorizontalAlignment]::Center
+$cPatchVal.Style.VerticalAlignment   = [OfficeOpenXml.Style.ExcelVerticalAlignment]::Center
+Set-BordeFino -Worksheet $wsExec -Rango "B12:Q12"
+
 
 ########################################################################
 # 10. GRÁFICOS EJECUTIVOS EN PORTADA (DONAS + RADAR + LÍNEAS)
 ########################################################################
 
 # Sección 1: Donas de Recursos
-Set-BannerTitulo -Worksheet $wsExec -Rango "B12:Q12" -Texto "1. UTILIZACIÓN ACTUAL DE CAPACIDAD Y RECURSOS DE HARDWARE"
-$wsExec.Row(12).Height = 24
-for ($r = 13; $r -le 24; $r++) { $wsExec.Row($r).Height = 18 }
+Set-BannerTitulo -Worksheet $wsExec -Rango "B14:Q14" -Texto "1. UTILIZACIÓN ACTUAL DE CAPACIDAD Y RECURSOS DE HARDWARE"
+$wsExec.Row(14).Height = 24
+for ($r = 15; $r -le 26; $r++) { $wsExec.Row($r).Height = 18 }
 
 function Add-DonaEjecutiva {
     param([string]$Nombre, [string]$Titulo, [string]$RangoValores, [string]$RangoCategorias, [int]$FilaAncla, [int]$ColAncla)
@@ -617,22 +667,22 @@ function Add-DonaEjecutiva {
     $serie.Header = $Titulo
 }
 
-Add-DonaEjecutiva -Nombre "DonaCPU"   -Titulo "CPU (${cpuUso}%)"           -RangoValores "F2:F3" -RangoCategorias "E2:E3" -FilaAncla 12 -ColAncla 1
-Add-DonaEjecutiva -Nombre "DonaRAM"   -Titulo "Memoria RAM (${ramUso}%)"   -RangoValores "I2:I3" -RangoCategorias "H2:H3" -FilaAncla 12 -ColAncla 6
-Add-DonaEjecutiva -Nombre "DonaDisco" -Titulo "Disco C: (${discoUso}%)"    -RangoValores "L2:L3" -RangoCategorias "K2:K3" -FilaAncla 12 -ColAncla 12
+Add-DonaEjecutiva -Nombre "DonaCPU"   -Titulo "CPU (${cpuUso}%)"           -RangoValores "F2:F3" -RangoCategorias "E2:E3" -FilaAncla 14 -ColAncla 1
+Add-DonaEjecutiva -Nombre "DonaRAM"   -Titulo "Memoria RAM (${ramUso}%)"   -RangoValores "I2:I3" -RangoCategorias "H2:H3" -FilaAncla 14 -ColAncla 6
+Add-DonaEjecutiva -Nombre "DonaDisco" -Titulo "Disco C: (${discoUso}%)"    -RangoValores "L2:L3" -RangoCategorias "K2:K3" -FilaAncla 14 -ColAncla 12
 
 # Sección 2: Radar de Seguridad + Líneas Históricas
-Set-BannerTitulo -Worksheet $wsExec -Rango "B26:I26" -Texto "2. POSTURA DE SEGURIDAD Y HARDENING (8 CONTROLES)"
-Set-BannerTitulo -Worksheet $wsExec -Rango "J26:Q26" -Texto "3. EVOLUCIÓN HISTÓRICA DE RENDIMIENTO Y HEALTH SCORE"
-$wsExec.Row(26).Height = 24
-for ($r = 27; $r -le 40; $r++) { $wsExec.Row($r).Height = 18 }
+Set-BannerTitulo -Worksheet $wsExec -Rango "B28:I28" -Texto "2. POSTURA DE SEGURIDAD Y HARDENING (8 CONTROLES)"
+Set-BannerTitulo -Worksheet $wsExec -Rango "J28:Q28" -Texto "3. EVOLUCIÓN HISTÓRICA DE RENDIMIENTO Y HEALTH SCORE"
+$wsExec.Row(28).Height = 24
+for ($r = 29; $r -le 42; $r++) { $wsExec.Row($r).Height = 18 }
 
 # Gráfico Radar (Seguridad)
 $radar = $wsExec.Drawings.AddChart("RadarSeguridad", [OfficeOpenXml.Drawing.Chart.eChartType]::RadarFilled)
 $radar.Title.Text = "Cobertura de Controles de Seguridad (%)"
 $radar.Title.Font.Size = 11
 $radar.Title.Font.Bold = $true
-$radar.SetPosition(26, 0, 1, 0)
+$radar.SetPosition(28, 0, 1, 0)
 $radar.SetSize(480, 240)
 $radar.Legend.Remove()
 $sRadar = $radar.Series.Add($wsAux.Cells["H8:H$finSec"], $wsAux.Cells["G8:G$finSec"])
@@ -646,7 +696,7 @@ if ($Historico -and @($Historico).Count -gt 0) {
     $lineas.Title.Font.Bold = $true
     $lineas.YAxis.MinValue = 0
     $lineas.YAxis.MaxValue = 100
-    $lineas.SetPosition(26, 0, 9, 0)
+    $lineas.SetPosition(28, 0, 9, 0)
     $lineas.SetSize(480, 240)
     $lineas.Legend.Position = [OfficeOpenXml.Drawing.Chart.eLegendPosition]::Bottom
 
@@ -656,20 +706,18 @@ if ($Historico -and @($Historico).Count -gt 0) {
     }
 }
 
-
-
 ########################################################################
 #11. TABLA DINÁMICA DE RIESGOS Y PLAN DE ACCIÓN EN PORTADA
 ########################################################################
 
-Set-BannerTitulo -Worksheet $wsExec -Rango "B42:Q42" -Texto "4. HALLAZGOS OPERATIVOS, RIESGOS DETECTADOS Y PLAN DE ACCIÓN"
-$wsExec.Row(42).Height = 24
-$wsExec.Row(43).Height = 22
+Set-BannerTitulo -Worksheet $wsExec -Rango "B44:Q44" -Texto "4. HALLAZGOS OPERATIVOS, RIESGOS DETECTADOS Y PLAN DE ACCIÓN"
+$wsExec.Row(44).Height = 24
+$wsExec.Row(45).Height = 22
 $HeadersTabla = @(
-@{ Rng = "B43:C43"; Txt = "SEVERIDAD" }
-@{ Rng = "D43:E43"; Txt = "ÁREA" }
-@{ Rng = "F43:K43"; Txt = "HALLAZGO DETECTADO" }
-@{ Rng = "L43:Q43"; Txt = "ACCIÓN RECOMENDADA PARA DIRECCIÓN / TI" }
+@{ Rng = "B45:C45"; Txt = "SEVERIDAD" }
+@{ Rng = "D45:E45"; Txt = "ÁREA" }
+@{ Rng = "F45:K45"; Txt = "HALLAZGO DETECTADO" }
+@{ Rng = "L45:Q45"; Txt = "ACCIÓN RECOMENDADA PARA DIRECCIÓN / TI" }
 )
 foreach ($ht in $HeadersTabla) {
 $wsExec.Cells[$ht.Rng].Merge = $true
@@ -683,9 +731,10 @@ $c.Style.Fill.BackgroundColor.SetColor($ColorNavyMed)
 $c.Style.HorizontalAlignment = [OfficeOpenXml.Style.ExcelHorizontalAlignment]::Center
 $c.Style.VerticalAlignment   = [OfficeOpenXml.Style.ExcelVerticalAlignment]::Center
 }
-Set-BordeFino -Worksheet $wsExec -Rango "B43:Q43"
+Set-BordeFino -Worksheet $wsExec -Rango "B45:Q45"
 for ($i = 0; $i -lt $Riesgos.Count; $i++) {
-$filaActual = 44 + $i
+$filaActual = 46 + $i
+
 $wsExec.Row($filaActual).Height = 26
 $rItem   = $Riesgos[$i]
 $recItem = if ($i -lt $Recomendaciones.Count) { $Recomendaciones[$i].Accion } else { "Monitoreo preventivo estándar" }

@@ -403,10 +403,11 @@ catch
 # WINDOWS UPDATE
 ########################################################################
 
-# Obtiene el último parche instalado.
+# 1. Obtiene el último parche instalado.
 try
 {
     $HotFix = Get-HotFix -ErrorAction Stop |
+    Where-Object { $_.InstalledOn } |
     Sort-Object InstalledOn -Descending |
     Select-Object -First 1
 }
@@ -418,6 +419,45 @@ catch
 
     $HotFix = $null
 }
+
+# 2. Obtiene parches pendientes (Críticos/Seguridad vs Opcionales).
+$ParchesPendientes_CritSec    = 0
+$ParchesPendientes_Opcionales = 0
+
+try
+{
+    Write-Log "INFO" "Consultando actualizaciones pendientes en Windows Update..."
+    $UpdateSession  = New-Object -ComObject Microsoft.Update.Session
+    $UpdateSearcher = $UpdateSession.CreateUpdateSearcher()
+    $SearchResult   = $UpdateSearcher.Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+
+    foreach ($Update in $SearchResult.Updates)
+    {
+        $Categorias = $Update.Categories | ForEach-Object { $_.Name }
+        if ($Categorias -match "Security|Critical" -or $Update.MsrcSeverity -in @("Critical", "Important"))
+        {
+            $ParchesPendientes_CritSec++
+        }
+        else
+        {
+            $ParchesPendientes_Opcionales++
+        }
+    }
+
+    if ($ParchesPendientes_CritSec -gt 0)
+    {
+        Write-Log "ALERTA" "Existen $ParchesPendientes_CritSec parches críticos o de seguridad pendientes."
+        $TotalHallazgos++
+    }
+}
+catch
+{
+    Write-Log "ADVERTENCIA" "No fue posible consultar parches pendientes."
+    $ParchesPendientes_CritSec    = "N/D"
+    $ParchesPendientes_Opcionales = "N/D"
+}
+
+
 
 ########################################################################
 # SERVICIOS
@@ -476,10 +516,16 @@ elseif(!$DefenderActivo)
 {
     $EstadoGeneral = "RIESGO-DEFENDER"
 }
+
 elseif(!$Firewall)
 {
     $EstadoGeneral = "RIESGO-FIREWALL"
 }
+elseif($ParchesPendientes_CritSec -is [int] -and $ParchesPendientes_CritSec -gt 0)
+{
+    $EstadoGeneral = "RIESGO-PARCHES"
+}
+
 
 ########################################################################
 # HEALTH SCORE
@@ -587,9 +633,12 @@ SMBv1 = $SMBv1
 BitLocker = $BitLockerEstado
 
 UltimoHotFix = if($HotFix){$HotFix.HotFixID}else{"No Disponible"}
-FechaHotFix = if($HotFix){$HotFix.InstalledOn}else{"No Disponible"}
+FechaHotFix = if($HotFix){$HotFix.InstalledOn.ToString("yyyy-MM-dd")}else{"No Disponible"}
+ParchesPendientes_CritSec = $ParchesPendientes_CritSec
+ParchesPendientes_Opcionales = $ParchesPendientes_Opcionales
 
 ServiciosAutomaticosDetenidos = $ServiciosAutomaticosDetenidos
+
 
 EventosCriticos7Dias = $EventosCriticos
 
