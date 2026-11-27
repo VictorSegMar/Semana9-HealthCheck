@@ -1,15 +1,10 @@
 ﻿# 🛡️ Health Check Enterprise – Automatización Operativa e Infraestructura
 
-![PowerShell](https://shields.io)
-![Platform](https://shields.io)
-![Status](https://shields.io)
-![License](https://shields.io)
+| Práctica | Instructor | Autor | Plataforma | Estado |
+| :--- | :--- | :--- | :--- | :--- |
+| **Semana 9 – Automatización Operativa** | Reyes Hernández René Iván | Víctor Manuel Segundo Márquez | Windows 10 / 11 / Server (PowerShell 5.1+) | Producción |
 
 Solución integral desarrollada en **PowerShell** para la auditoría automatizada de inventario, diagnóstico de salud (*Health Check*), generación de tableros ejecutivos en Excel, gestión de reversión (*Rollback*) con respaldo preventivo y ejecución desatendida en entornos Windows.
-
-> **Práctica Semana 9 – Automatización Operativa**  
-> **Instructor:** Reyes Hernández René Iván  
-> **Autor:** Víctor Manuel Segundo Márquez  
 
 ---
 
@@ -86,7 +81,7 @@ cd C:\Semana9-Automatizacion\Scripts\OFICIALES
 ```
 
 ### Automatización Diaria (Task Scheduler)
-Para programar la ejecución diaria desatendida (por defecto a las `08:00`, editable en `$HoraEjecucion`):
+Para programar la ejecución diaria desatendida (editable en `$HoraEjecucion`):
 ```powershell
 .\Configurar-TareaProgramada.ps1
 ```
@@ -106,10 +101,10 @@ Antes de modificar o borrar cualquier archivo, el script verifica que `HealthChe
 
 | Opción | Acción | Caso de Uso |
 | :---: | :--- | :--- |
-| **`[1]`** | **Limpieza Total** | Respalda en `.zip` y vacía `Reportes\` para iniciar un ciclo limpio. |
-| **`[2]`** | **Rollback Parcial** | Elimina únicamente el último registro añadido a `HealthCheck_History.csv`. |
-| **`[3]`** | **Restauración desde Backup** | Lista los `.zip` disponibles y restaura íntegramente el corte elegido. |
-| **`[4]`** | **Cancelar / Salir** | Aborta la operación sin realizar cambios. |
+| **1** | **Limpieza Total** | Respalda en `.zip` y vacía `Reportes\` para iniciar un ciclo limpio. |
+| **2** | **Rollback Parcial** | Elimina únicamente el último registro añadido a `HealthCheck_History.csv`. |
+| **3** | **Restauración desde Backup** | Lista los `.zip` disponibles y restaura íntegramente el corte elegido. |
+| **4** | **Cancelar / Salir** | Aborta la operación sin realizar cambios. |
 
 ### 2. Rollback de Código Fuente (Git)
 Para revertir modificaciones en los scripts a una versión estable previa:
