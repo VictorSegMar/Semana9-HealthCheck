@@ -1,6 +1,4 @@
-﻿\\$readme = @'
-
-\# 🛡️ Health Check Enterprise – Automatización Operativa e Infraestructura
+﻿\# 🛡️ Health Check Enterprise – Automatización Operativa e Infraestructura
 
 
 
@@ -179,12 +177,6 @@ git log --oneline
 git revert HEAD
 
 ```
-
-'@
-
-
-
-$readme | Out-File -FilePath "C:\\Semana9-Automatizacion\\Scripts\\OFICIALES\\README.md" -Encoding utf8
 
 
 
