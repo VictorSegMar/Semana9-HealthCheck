@@ -16,7 +16,6 @@
 
 $RutaReportes = "C:\Semana9-Automatizacion\Reportes"          # Carpeta donde se generan CSV, XLSX y Logs
 $RutaBackups  = "C:\Semana9-Automatizacion\Backups_Rollback"  # Carpeta destino para respaldos comprimidos (.zip)
-$FechaCorte   = Get-Date -Format "yyyyMMdd_HHmmss"            # Marca de tiempo única para nombrar cada respaldo
 $MaxBackups   = 10                                            # Número máximo de respaldos ZIP a conservar
 
 ########################################################################
@@ -67,7 +66,8 @@ function Invoke-RespaldoPreventivo {
     $Archivos = Get-ChildItem -Path $RutaReportes -File -ErrorAction SilentlyContinue
     if (-not $Archivos -or $Archivos.Count -eq 0) { return $null }
 
-    # Comprime todos los archivos actuales en un paquete ZIP con fecha y hora
+        # Genera la marca de tiempo exacta al momento de respaldar
+    $FechaCorte = Get-Date -Format "yyyyMMdd_HHmmss"
     $ArchivoZip = Join-Path $RutaBackups "Backup_PreRollback_$FechaCorte.zip"
     Compress-Archive -Path "$RutaReportes\*" -DestinationPath $ArchivoZip -Force
 
@@ -80,144 +80,205 @@ function Invoke-RespaldoPreventivo {
     return $ArchivoZip
 }
 
-
-########################################################################
-# MÓDULO 3: INTERFAZ DE USUARIO Y VALIDACIÓN PREVENTIVA DE BLOQUEOS
-# Propósito: Mostrar las opciones disponibles al operador y frenar el
-# proceso si el archivo Excel está abierto para evitar errores parciales.
-########################################################################
-
-Clear-Host
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "     SISTEMA DE ROLLBACK & RECUPERACIÓN - HEALTH CHECK    " -ForegroundColor Cyan
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "1. Limpieza total (Crea Backup ZIP y vacía carpeta Reportes)"
-Write-Host "2. Deshacer última ejecución (Elimina último registro del Histórico)"
-Write-Host "3. Restaurar reportes desde un Backup ZIP existente"
-Write-Host "4. Cancelar / Salir"
-Write-Host "==========================================================" -ForegroundColor Cyan
-
-$Opcion = Read-Host "Selecciona una opción (1-4)"
-
-# Verifica que HealthCheck_Dashboard.xlsx no esté bloqueado antes de ejecutar opciones 1 o 3
-$ExcelPath = Join-Path $RutaReportes "HealthCheck_Dashboard.xlsx"
-if ($Opcion -in @("1", "3") -and (Test-ArchivoBloqueado -RutaArchivo $ExcelPath)) {
-    Write-Host "`n[ERROR] El archivo 'HealthCheck_Dashboard.xlsx' está abierto en Excel." -ForegroundColor Red
-    Write-Host "Ciérralo primero y vuelve a ejecutar el Rollback." -ForegroundColor Yellow
-    return
+# Función: Pause-VolverAlMenu
+# Detiene la pantalla para que el usuario lea el resultado antes de regresar al menú principal.
+function Pause-VolverAlMenu {
+    Write-Host ""
+    Read-Host "Presiona [ENTER] para volver al menú principal" | Out-Null
 }
 
+
+
 ########################################################################
-# MÓDULO 4: EJECUCIÓN DE MODOS DE RECUPERACIÓN (SWITCH PRINCIPAL)
-# Propósito: Ejecutar la lógica específica según la opción elegida.
+# MÓDULO 3: BUCLE DE NAVEGACIÓN, INTERFAZ Y VALIDACIÓN DE BLOQUEOS
+# Propósito: Mantener el menú activo hasta que el usuario elija salir,
+# permitiendo cancelar cualquier acción y regresar al inicio.
 ########################################################################
 
-switch ($Opcion) {
+$Continuar = $true
 
-    # ------------------------------------------------------------------
-    # OPCIÓN 1: LIMPIEZA TOTAL CON RESPALDO PREVENTIVO
-    # Respalda toda la carpeta Reportes en ZIP y elimina los archivos activos.
-    # ------------------------------------------------------------------
-    "1" {
-        if (-not (Test-Path $RutaReportes)) {
-            Write-Host "`n[INFO] No existe la carpeta de reportes. Nada que limpiar." -ForegroundColor Yellow
-            return
-        }
+while ($Continuar) {
+    Clear-Host
+    Write-Host "==========================================================" -ForegroundColor Cyan
+    Write-Host "     SISTEMA DE ROLLBACK & RECUPERACIÓN - HEALTH CHECK    " -ForegroundColor Cyan
+    Write-Host "==========================================================" -ForegroundColor Cyan
+    Write-Host "1. Limpieza total (Crea Backup ZIP y vacía carpeta Reportes)"
+    Write-Host "2. Deshacer última ejecución (Elimina último registro del Histórico)"
+    Write-Host "3. Restaurar reportes desde un Backup ZIP existente"
+    Write-Host "4. Salir"
+    Write-Host "==========================================================" -ForegroundColor Cyan
 
-        $Zip = Invoke-RespaldoPreventivo
-        if (-not $Zip) {
-            Write-Host "`n[INFO] La carpeta de reportes ya está vacía." -ForegroundColor Green
-            return
-        }
+    $Opcion = Read-Host "Selecciona una opción (1-4)"
 
-        Write-Host "`n[OK] Respaldo creado en: $Zip" -ForegroundColor Green
-        
-        # Recorre y elimina cada archivo del directorio de reportes
-        $Archivos = Get-ChildItem -Path $RutaReportes -File
-        foreach ($Arch in $Archivos) {
-            Remove-Item -Path $Arch.FullName -Force
-            Write-Host "  -> Eliminado: $($Arch.Name)" -ForegroundColor Gray
-        }
-
-        Write-RollbackLog "Limpieza total ejecutada ($($Archivos.Count) archivos). Respaldo: $Zip"
-        Write-Host "`n[COMPLETADO] Entorno limpio y listo para nueva ejecución." -ForegroundColor Cyan
+    # Verifica que HealthCheck_Dashboard.xlsx no esté bloqueado antes de opciones 1 o 3
+    $ExcelPath = Join-Path $RutaReportes "HealthCheck_Dashboard.xlsx"
+    if ($Opcion -in @("1", "3") -and (Test-ArchivoBloqueado -RutaArchivo $ExcelPath)) {
+        Write-Host "`n[ERROR] El archivo 'HealthCheck_Dashboard.xlsx' está abierto en Excel." -ForegroundColor Red
+        Write-Host "Ciérralo primero antes de continuar." -ForegroundColor Yellow
+        Pause-VolverAlMenu
+        continue
     }
 
-    # ------------------------------------------------------------------
-    # OPCIÓN 2: ROLLBACK PARCIAL (ÚLTIMA EJECUCIÓN DEL HISTÓRICO)
-    # Conserva las ejecuciones anteriores y elimina solo la última fila
-    # agregada a HealthCheck_History.csv.
-    # ------------------------------------------------------------------
-    "2" {
-        $HistPath = Join-Path $RutaReportes "HealthCheck_History.csv"
-        if (-not (Test-Path $HistPath)) {
-            Write-Host "`n[ERROR] No se encontró el archivo HealthCheck_History.csv." -ForegroundColor Red
-            return
+
+
+    ####################################################################
+    # MÓDULO 4: EJECUCIÓN DE MODOS DE RECUPERACIÓN CON CONFIRMACIÓN
+    # Propósito: Solicitar confirmación explícita en cada operación
+    # permitiendo cancelar y volver al menú principal en todo momento.
+    ####################################################################
+
+    switch ($Opcion) {
+
+        # --------------------------------------------------------------
+        # OPCIÓN 1: LIMPIEZA TOTAL CON CONFIRMACIÓN PREVIA
+        # --------------------------------------------------------------
+        "1" {
+            if (-not (Test-Path $RutaReportes)) {
+                Write-Host "`n[INFO] No existe la carpeta de reportes. Nada que limpiar." -ForegroundColor Yellow
+                Pause-VolverAlMenu
+                continue
+            }
+
+            $Archivos = @(Get-ChildItem -Path $RutaReportes -File)
+            if ($Archivos.Count -eq 0) {
+                Write-Host "`n[INFO] La carpeta de reportes ya está vacía." -ForegroundColor Green
+                Pause-VolverAlMenu
+                continue
+            }
+
+            Write-Host "`n--- CONFIRMACIÓN DE LIMPIEZA TOTAL ---" -ForegroundColor Yellow
+            Write-Host "Se respaldarán en ZIP y luego se eliminarán $($Archivos.Count) archivo(s) de Reportes."
+            $Confirmar = Read-Host "¿Deseas continuar? (S = Sí, ejecutar / C = Cancelar y volver al menú)"
+
+            if ($Confirmar -notin @("S", "s", "SI", "si", "Sí", "sí")) {
+                Write-Host "`n[CANCELADO] Operación abortada. Volviendo al menú principal..." -ForegroundColor Gray
+                Start-Sleep -Seconds 1
+                continue
+            }
+
+            $Zip = Invoke-RespaldoPreventivo
+            Write-Host "`n[OK] Respaldo creado en: $Zip" -ForegroundColor Green
+            
+            foreach ($Arch in $Archivos) {
+                Remove-Item -Path $Arch.FullName -Force
+                Write-Host "  -> Eliminado: $($Arch.Name)" -ForegroundColor Gray
+            }
+
+            Write-RollbackLog "Limpieza total ejecutada ($($Archivos.Count) archivos). Respaldo: $Zip"
+            Write-Host "`n[COMPLETADO] Entorno limpio y listo para nueva ejecución." -ForegroundColor Cyan
+            Pause-VolverAlMenu
         }
 
-        # Carga el histórico como arreglo de objetos para manipular sus filas
-        $Historico = @(Import-Csv -Path $HistPath -Encoding UTF8)
-        if ($Historico.Count -le 1) {
-            Write-Host "`n[ADVERTENCIA] El histórico solo tiene $($Historico.Count) registro. Usa la Opción 1 para limpieza total." -ForegroundColor Yellow
-            return
+        # --------------------------------------------------------------
+        # OPCIÓN 2: ROLLBACK PARCIAL CON CONFIRMACIÓN DEL REGISTRO
+        # --------------------------------------------------------------
+        "2" {
+            $HistPath = Join-Path $RutaReportes "HealthCheck_History.csv"
+            if (-not (Test-Path $HistPath)) {
+                Write-Host "`n[ERROR] No se encontró el archivo HealthCheck_History.csv." -ForegroundColor Red
+                Pause-VolverAlMenu
+                continue
+            }
+
+            $Historico = @(Import-Csv -Path $HistPath -Encoding UTF8)
+            if ($Historico.Count -le 1) {
+                Write-Host "`n[ADVERTENCIA] El histórico solo tiene $($Historico.Count) registro. Usa la Opción 1 para limpieza total." -ForegroundColor Yellow
+                Pause-VolverAlMenu
+                continue
+            }
+
+            $UltimoRegistro = $Historico[-1]
+            Write-Host "`n--- CONFIRMACIÓN DE ROLLBACK PARCIAL ---" -ForegroundColor Yellow
+            Write-Host "Último registro detectado -> Fecha: $($UltimoRegistro.Fecha) | Score: $($UltimoRegistro.Score)"
+            $Confirmar = Read-Host "¿Deseas eliminar este registro? (S = Sí, eliminar / C = Cancelar y volver al menú)"
+
+            if ($Confirmar -notin @("S", "s", "SI", "si", "Sí", "sí")) {
+                Write-Host "`n[CANCELADO] No se modificó el histórico. Volviendo al menú principal..." -ForegroundColor Gray
+                Start-Sleep -Seconds 1
+                continue
+            }
+
+            $Zip = Invoke-RespaldoPreventivo
+            $HistoricoRecortado = $Historico[0..($Historico.Count - 2)]
+            $HistoricoRecortado | Export-Csv -Path $HistPath -NoTypeInformation -Encoding UTF8
+
+            Write-RollbackLog "Se revirtió el último registro del histórico (Fecha: $($UltimoRegistro.Fecha)). Respaldo: $Zip"
+            Write-Host "`n[OK] Se eliminó del histórico la ejecución del: $($UltimoRegistro.Fecha)" -ForegroundColor Green
+            Write-Host "Registros restantes en histórico: $($HistoricoRecortado.Count)" -ForegroundColor Cyan
+            Write-Host "Nota: Ejecuta .\HealthCheckDashboard.ps1 para regenerar el Excel con este cambio." -ForegroundColor Yellow
+            Pause-VolverAlMenu
         }
 
-        # Respalda antes de recortar el CSV
-        $Zip = Invoke-RespaldoPreventivo
-        $UltimoRegistro = $Historico[-1]
-        
-        # Conserva desde el primer registro (índice 0) hasta el penúltimo (Count - 2)
-        $HistoricoRecortado = $Historico[0..($Historico.Count - 2)]
-        $HistoricoRecortado | Export-Csv -Path $HistPath -NoTypeInformation -Encoding UTF8
+        # --------------------------------------------------------------
+        # OPCIÓN 3: RESTAURACIÓN DESDE BACKUP ZIP CON OPCIÓN DE VOLVER
+        # --------------------------------------------------------------
+        "3" {
+            if (-not (Test-Path $RutaBackups)) {
+                Write-Host "`n[ERROR] No existe la carpeta de respaldos ($RutaBackups)." -ForegroundColor Red
+                Pause-VolverAlMenu
+                continue
+            }
 
-        Write-RollbackLog "Se revirtió el último registro del histórico (Fecha: $($UltimoRegistro.Fecha)). Respaldo: $Zip"
-        Write-Host "`n[OK] Se eliminó del histórico la ejecución del: $($UltimoRegistro.Fecha)" -ForegroundColor Green
-        Write-Host "Registros restantes en histórico: $($HistoricoRecortado.Count)" -ForegroundColor Cyan
-        Write-Host "Nota: Ejecuta .\HealthCheckDashboard.ps1 para regenerar el Excel con este cambio." -ForegroundColor Yellow
-    }
+            $Backups = @(Get-ChildItem -Path $RutaBackups -Filter "Backup_PreRollback_*.zip" | Sort-Object LastWriteTime -Descending)
+            if ($Backups.Count -eq 0) {
+                Write-Host "`n[INFO] No hay archivos de respaldo disponibles para restaurar." -ForegroundColor Yellow
+                Pause-VolverAlMenu
+                continue
+            }
 
-    # ------------------------------------------------------------------
-    # OPCIÓN 3: RESTAURACIÓN COMPLETA DESDE UN BACKUP ZIP
-    # Lista los paquetes ZIP disponibles y descomprime el elegido.
-    # ------------------------------------------------------------------
-    "3" {
-        if (-not (Test-Path $RutaBackups)) {
-            Write-Host "`n[ERROR] No existe la carpeta de respaldos ($RutaBackups)." -ForegroundColor Red
-            return
+            Write-Host "`nRespaldos disponibles:" -ForegroundColor Cyan
+            Write-Host "  [0] <-- Cancelar y volver al menú principal" -ForegroundColor Yellow
+            for ($i = 0; $i -lt $Backups.Count; $i++) {
+                Write-Host "  [$($i + 1)] $($Backups[$i].Name)  ($(Get-Date $Backups[$i].LastWriteTime -Format 'dd/MM/yyyy HH:mm:ss'))"
+            }
+
+            $Sel = Read-Host "`nIngresa el número del respaldo a restaurar (0 para cancelar, 1-$($Backups.Count))"
+            
+            if ($Sel -eq "0") {
+                Write-Host "`n[CANCELADO] Volviendo al menú principal..." -ForegroundColor Gray
+                Start-Sleep -Seconds 1
+                continue
+            }
+
+            $Idx = 0
+            if (-not [int]::TryParse($Sel, [ref]$Idx) -or $Idx -lt 1 -or $Idx -gt $Backups.Count) {
+                Write-Host "`n[ERROR] Selección inválida." -ForegroundColor Red
+                Pause-VolverAlMenu
+                continue
+            }
+
+            $ZipElegido = $Backups[$Idx - 1]
+            $Confirmar = Read-Host "¿Confirmas reemplazar los reportes actuales con '$($ZipElegido.Name)'? (S = Sí / C = Cancelar)"
+            
+            if ($Confirmar -notin @("S", "s", "SI", "si", "Sí", "sí")) {
+                Write-Host "`n[CANCELADO] Restauración abortada. Volviendo al menú principal..." -ForegroundColor Gray
+                Start-Sleep -Seconds 1
+                continue
+            }
+
+            if (-not (Test-Path $RutaReportes)) { New-Item -ItemType Directory -Path $RutaReportes -Force | Out-Null }
+            Get-ChildItem -Path $RutaReportes -File | Remove-Item -Force -ErrorAction SilentlyContinue
+            Expand-Archive -Path $ZipElegido.FullName -DestinationPath $RutaReportes -Force
+
+            Write-RollbackLog "Entorno restaurado desde el respaldo: $($ZipElegido.Name)"
+            Write-Host "`n[OK] Reportes restaurados exitosamente desde $($ZipElegido.Name)." -ForegroundColor Green
+            Pause-VolverAlMenu
         }
 
-        # Obtiene los respaldos disponibles ordenados del más reciente al más antiguo
-        $Backups = @(Get-ChildItem -Path $RutaBackups -Filter "Backup_PreRollback_*.zip" | Sort-Object LastWriteTime -Descending)
-        if ($Backups.Count -eq 0) {
-            Write-Host "`n[INFO] No hay archivos de respaldo disponibles para restaurar." -ForegroundColor Yellow
-            return
+        # --------------------------------------------------------------
+        # OPCIÓN 4: SALIR DEL SCRIPT
+        # --------------------------------------------------------------
+        "4" {
+            Write-Host "`nSaliendo del sistema de Rollback. ¡Hasta pronto!" -ForegroundColor Cyan
+            $Continuar = $false
         }
 
-        # Muestra el catálogo numerado de respaldos al usuario
-        Write-Host "`nRespaldos disponibles:" -ForegroundColor Cyan
-        for ($i = 0; $i -lt $Backups.Count; $i++) {
-            Write-Host "  [$($i + 1)] $($Backups[$i].Name)  ($(Get-Date $Backups[$i].LastWriteTime -Format 'dd/MM/yyyy HH:mm:ss'))"
+        # --------------------------------------------------------------
+        # OPCIÓN INVÁLIDA: AVISO Y REGRESO AL MENÚ
+        # --------------------------------------------------------------
+        default {
+            Write-Host "`n[ADVERTENCIA] Opción no válida. Elige un número del 1 al 4." -ForegroundColor Yellow
+            Start-Sleep -Seconds 1
         }
-        # Valida que la selección numérica esté dentro del rango válido
-        $Sel = Read-Host "`nIngresa el número del respaldo a restaurar (1-$($Backups.Count))"
-        $Idx = 0
-        if (-not [int]::TryParse($Sel, [ref]$Idx) -or $Idx -lt 1 -or $Idx -gt $Backups.Count) {
-            Write-Host "[ERROR] Selección inválida." -ForegroundColor Red
-            return
-        }
-        $ZipElegido = $Backups[$Idx - 1]
-        # Limpia archivos actuales y extrae el contenido íntegro del ZIP seleccionado
-        if (-not (Test-Path $RutaReportes)) { New-Item -ItemType Directory -Path $RutaReportes -Force | Out-Null }
-        Get-ChildItem -Path $RutaReportes -File | Remove-Item -Force -ErrorAction SilentlyContinue
-        Expand-Archive -Path $ZipElegido.FullName -DestinationPath $RutaReportes -Force
-        Write-RollbackLog "Entorno restaurado desde el respaldo: $($ZipElegido.Name)"
-        Write-Host "`n[OK] Reportes restaurados exitosamente desde $($ZipElegido.Name)." -ForegroundColor Green
-        }
-    # ------------------------------------------------------------------
-    # OPCIÓN 4: SALIDA SEGURA
-    # Finaliza el script sin realizar ninguna modificación.
-    # ------------------------------------------------------------------
-    default {
-    	Write-Host "`nOperación cancelada por el usuario." -ForegroundColor Gray
     }
 }
