@@ -1,87 +1,190 @@
-﻿# 🛡️ Health Check Enterprise & Dashboard Ejecutivo
+﻿\\$readme = @'
 
-**Autor:** Victor Manuel Segundo Marquez  
-**Tecnologías:** PowerShell | ImportExcel (EPPlus) | Windows Update Agent (COM) | Task Scheduler | CIM/WMI
+\# 🛡️ Health Check Enterprise – Automatización Operativa e Infraestructura
 
----
 
-## 📋 Descripción General
-Solución integral de automatización en PowerShell diseñada para auditar la salud operativa, postura de seguridad y estado de parcheo de equipos Windows, consolidando los hallazgos en un **Dashboard Ejecutivo en Excel** con ejecución diaria programada.
 
----
+Solución integral desarrollada en \*\*PowerShell\*\* para la auditoría automatizada de inventario, diagnóstico de salud (\*Health Check\*), generación de tableros ejecutivos en Excel, gestión de reversión (\*Rollback\*) y ejecución desatendida en entornos Windows.
 
-## 📂 Estructura del Repositorio
 
-| Archivo | Función Principal |
-| :--- | :--- |
-| **`HealthCheck.ps1`** | Recolecta métricas de hardware, red, seguridad (8 controles), servicios, eventos críticos y estado de Windows Update (último KB aplicado y parches pendientes). Exporta a CSV (`Report` e `History`) y registra bitácora (`Log`). |
-| **`HealthCheckDashboard.ps1`** | Procesa los datos recolectados, evalúa 11 reglas dinámicas de riesgo y construye un libro de Excel de 6 pestañas con tarjetas KPI, gráficos ejecutivos y formato listo para PDF. |
-| **`Run-HealthCheckSuite.ps1`** | Script orquestador que ejecuta secuencialmente el diagnóstico (`HealthCheck.ps1`) y la generación del reporte gerencial (`HealthCheckDashboard.ps1`). |
-| **`Configurar-TareaProgramada.ps1`** | Instalador parametrizable que registra o actualiza la ejecución automática diaria en el Programador de Tareas de Windows. |
-| **`Aplicar_Nuevo_Horario.bat`** | Lanzador de un solo clic con elevación automática de privilegios para aplicar cambios de horario sin abrir manualmente la consola. |
-| **`Rollback.ps1`** | Script de contingencia para limpiar archivos generados y restaurar el directorio al estado inicial. |
 
----
+> \*\*Práctica Semana 9 – Automatización Operativa\*\*  
 
-## 🚀 Capacidades Principales
+> \*\*Instructor:\*\* Reyes Hernández René Iván  
 
-### 1. Diagnóstico Integral (`HealthCheck.ps1`)
-* **Inventario y Rendimiento:** Hardware, BIOS, CPU, Memoria RAM, almacenamiento lógico (`C:`), salud física del disco (SSD/HDD) y tiempo de actividad (*Uptime*).
-* **Seguridad y Hardening (8 Controles):** Microsoft Defender, Protección en Tiempo Real, Firewall de Windows (todos los perfiles), TPM (Presente y Listo), Secure Boot, estado de SMBv1 y cifrado BitLocker.
-* **Gestión de Parches (Windows Update):**
-  * Identificación del **último parche aplicado** (ID `KB` y fecha de instalación).
-  * Conteo automatizado de **actualizaciones pendientes**, clasificadas en **Críticas / Seguridad** y **Opcionales**.
-* **Cálculo de Salud:** Generación automática de *Health Score* (0–100) y Semáforo operativo (`VERDE`, `AMARILLO`, `ROJO`).
+> \*\*Autor:\*\* Víctor Manuel Segundo Márquez  
 
-### 2. Dashboard Ejecutivo (`HealthCheckDashboard.ps1`)
-* **Portada Gerencial (`01_ResumenEjecutivo`):** Tarjetas KPI dinámicas, barra ejecutiva de Windows Update, gráficos de dona (CPU/RAM/Disco), gráfico radar de seguridad, tendencia histórica y tabla priorizada de riesgos y remediación.
-* **Trazabilidad Técnica:** Pestañas dedicadas para la última ejecución (`02`), histórico (`03`), matriz de cumplimiento (`04`), plan de acción (`05`) y bitácora auditada (`06`).
 
----
 
-## ⚙️ Requisitos Previos
-1. **Windows 10 / 11** o **Windows Server** con PowerShell 5.1 o superior.
-2. Ejecutar con permisos de **Administrador** (requerido para BitLocker, Secure Boot, eventos del sistema y registro de tareas programadas).
-3. Módulo **`ImportExcel`** instalado:
-   ```powershell
-   Install-Module -Name ImportExcel -Scope CurrentUser -Force
-   ```
+\---
 
----
 
-## ▶️ Guía de Ejecución
 
-### Ejecución Manual
-1. Abrir **PowerShell como Administrador** y navegar al directorio de scripts:
-   ```powershell
-   cd C:\Semana9-Automatizacion\Scripts\OFICIALES
-   ```
-2. Ejecutar la suite completa (diagnóstico + dashboard):
-   ```powershell
-   .\Run-HealthCheckSuite.ps1
-   ```
-3. Los archivos resultantes se almacenarán en `C:\Semana9-Automatizacion\Reportes\`.
+\## 📋 Arquitectura del Proyecto
 
-### Ejecución Automática Programada (Sin consola)
-1. Abrir **`Configurar-TareaProgramada.ps1`** y editar la variable `$HoraEjecucion` (formato 24h, ej. `"15:50"`).
-2. Hacer doble clic sobre **`Aplicar_Nuevo_Horario.bat`** y aceptar el control de cuentas de usuario (**Sí**) para aplicar el nuevo horario automáticamente.
 
----
 
-## 🔄 Procedimiento de Rollback y Recuperación
+```text
 
-### 1. Limpieza de Archivos Generados (`.\Rollback.ps1`)
-```powershell
-.\Rollback.ps1
+C:\\Semana9-Automatizacion\\
+
+├── Scripts\\OFICIALES\\
+
+│   ├── HealthCheck.ps1                # Motor principal de diagnóstico, validaciones y auditoría
+
+│   ├── HealthCheckDashboard.ps1       # Generador de Dashboard Ejecutivo en Excel (.xlsx)
+
+│   ├── Rollback.ps1                   # Herramienta de respaldo preventivo y reversión operativa
+
+│   ├── Run-HealthCheckSuite.ps1       # Script orquestador (ejecución secuencial)
+
+│   ├── Configurar-TareaProgramada.ps1 # Instalador parametrizable en Windows Task Scheduler
+
+│   └── README.md                      # Documentación técnica del repositorio
+
+├── Reportes\\
+
+│   ├── HealthCheck\_Report.csv         # Último diagnóstico ejecutado
+
+│   ├── HealthCheck\_History.csv        # Histórico acumulado de ejecuciones
+
+│   ├── HealthCheck\_Log.txt            # Bitácora cronológica de eventos y alertas
+
+│   └── HealthCheck\_Dashboard.xlsx     # Reporte gerencial con KPIs y gráficas
+
+└── Backups\_Rollback\\                  # Respaldos comprimidos (.zip) generados por Rollback.ps1
+
 ```
 
-### 2. Rollback de Código Fuente (Git)
-* **Descartar cambios locales no confirmados:**
-  ```powershell
-  git checkout -- HealthCheck.ps1
-  ```
-* **Restaurar un script desde una versión estable anterior:**
-  ```powershell
-  git log --oneline
-  git checkout <hash-version-estable> -- HealthCheck.ps1
-  ```
+
+
+\---
+
+
+
+\## ⚙️ Requisitos Previos
+
+
+
+\* \*\*Sistema Operativo:\*\* Windows 10 / Windows 11 / Windows Server.
+
+\* \*\*PowerShell:\*\* Versión 5.1 o superior (ejecutado con privilegios de \*\*Administrador\*\*).
+
+\* \*\*Módulo de Excel:\*\* `ImportExcel` (para la generación nativa de `.xlsx` sin requerir Microsoft Excel instalado).
+
+
+
+```powershell
+
+Install-Module ImportExcel -Scope CurrentUser -Force
+
+```
+
+
+
+\---
+
+
+
+\## 🚀 Descripción de Componentes y Uso
+
+
+
+\### 1. Diagnóstico y Monitoreo (`HealthCheck.ps1`)
+
+Recopila métricas de hardware, sistema operativo, red, seguridad (Windows Defender, Firewall, BitLocker, Secure Boot) y parches pendientes de Windows Update. Incorpora manejo de excepciones (`try/catch`), cálculo de \*Health Score\* (0–100) y semaforización.
+
+```powershell
+
+.\\HealthCheck.ps1
+
+```
+
+
+
+\### 2. Tablero Gerencial (`HealthCheckDashboard.ps1`)
+
+Procesa los archivos `.csv` y `.txt` generados para construir un libro de Excel de 6 pestañas con KPIs, gráficas de utilización de recursos y matriz de hallazgos.
+
+```powershell
+
+.\\HealthCheckDashboard.ps1
+
+```
+
+
+
+\### 3. Orquestación Completa (`Run-HealthCheckSuite.ps1`)
+
+Ejecuta de forma secuencial el diagnóstico (`HealthCheck.ps1`) y actualiza inmediatamente el tablero visual (`HealthCheckDashboard.ps1`).
+
+```powershell
+
+.\\Run-HealthCheckSuite.ps1
+
+```
+
+
+
+\### 4. Programación de Tarea Diaria (`Configurar-TareaProgramada.ps1`)
+
+Registra la suite en el \*\*Programador de Tareas de Windows\*\* (`HealthCheck\_Enterprise\_Diario`) para su ejecución diaria desatendida con privilegios máximos. Permite modificar la variable `$HoraEjecucion` (formato 24h `"HH:mm"`) según las necesidades operativas.
+
+```powershell
+
+.\\Configurar-TareaProgramada.ps1
+
+```
+
+
+
+\---
+
+
+
+\## 🔄 Procedimiento de Rollback y Recuperación
+
+
+
+El proyecto cuenta con dos niveles de reversión:
+
+
+
+\### A. Rollback Operativo de Datos (`Rollback.ps1`)
+
+Verifica que los archivos no estén bloqueados por otros procesos, genera un respaldo comprimido `.zip` (conservando los últimos 10 backups) y permite elegir entre:
+
+1\. \*\*Limpieza Total:\*\* Elimina los reportes actuales tras respaldarlos.
+
+2\. \*\*Rollback Parcial:\*\* Elimina únicamente el último registro añadido a `HealthCheck\_History.csv`.
+
+3\. \*\*Restauración desde Backup:\*\* Recupera el estado anterior desde un archivo `.zip`.
+
+```powershell
+
+.\\Rollback.ps1
+
+```
+
+
+
+\### B. Rollback de Código Fuente (Git)
+
+Para revertir cambios en los scripts a una versión estable anterior:
+
+```powershell
+
+git log --oneline
+
+git revert HEAD
+
+```
+
+'@
+
+
+
+$readme | Out-File -FilePath "C:\\Semana9-Automatizacion\\Scripts\\OFICIALES\\README.md" -Encoding utf8
+
+
+
